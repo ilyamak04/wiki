@@ -4,7 +4,7 @@ copyright: Copyright &copy; 2025
 theme:
   name: material
   language: ru
-  favicon: docs/assets/favicon.ico
+  favicon: assets/images.png
 
   icon:
     repo: fontawesome/brands/github
@@ -54,6 +54,7 @@ markdown_extensions:
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
+  - pymdownx.highlight
   - pymdownx.superfences
   - pymdownx.details
   - pymdownx.blocks.caption
