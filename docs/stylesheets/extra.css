@@ -1,0 +1,18 @@
+.md-source__facts {
+    display: none;
+}
+
+.md-footer {
+    margin-top: 50px;
+}
+
+/* Достаточно добавить { .code-wrap } к блоку кода, чтобы включить автоперенос строк. 
+   Пример:
+   ```sh { .code-wrap }
+   *very long line of code here*
+   ```
+*/
+.code-wrap code {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
