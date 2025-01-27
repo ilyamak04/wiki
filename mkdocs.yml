@@ -1,0 +1,68 @@
+site_name: Ilya Makarov knowledge base
+site_url: https://wiki.mcarov.pro
+copyright: Copyright &copy; 2025
+theme:
+  name: material
+  language: ru
+  favicon: assets/favicon.ico
+
+  icon:
+    repo: fontawesome/brands/github
+  
+features:
+    - navigation.indexes
+    - navigation.instant
+    - navigation.tabs
+    - content.code.copy
+    - content.action.edit
+    - content.action.view
+
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github 
+      link: https://git.mcarov.pro/ilyamak04/wiki
+
+markdown_extensions:
+  - attr_list
+  - admonition
+  - pymdownx.tabbed:
+      alternate_style: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.blocks.caption
+  - toc:
+      permalink: "#"
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+
+extra_css:
+  - stylesheets/extra.css
+
+plugins:
+  - glightbox

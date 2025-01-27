@@ -1,0 +1,4 @@
+mkdocs
+mkdocs-glightbox
+pymdown-extensions
+mkdocs-material
