@@ -4,7 +4,7 @@ copyright: Copyright &copy; 2025
 theme:
   name: material
   language: ru
-  favicon: assets/favicon.ico
+  favicon: docs/assets/favicon.ico
 
   icon:
     repo: fontawesome/brands/github
@@ -39,7 +39,7 @@ extra:
       link: https://git.mcarov.pro/ilyamak04/wiki
     - icon: fontawesome/brands/telegram
       link: https://t.me/ya_ne_moguu
-      
+
 markdown_extensions:
   - attr_list
   - admonition
