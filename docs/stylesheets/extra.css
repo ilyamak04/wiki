@@ -16,3 +16,24 @@
     white-space: pre-wrap;
     word-break: break-word;
 }
+
+/* Увеличение шрифта для inline-команд */
+code {
+    font-size: 1.1rem; /* Увеличиваем шрифт */
+    background-color: #f5f5f5; /* Светлый фон */
+    border: 1px solid #dcdcdc; /* Добавляем тонкий кант */
+    border-radius: 4px; /* Закругляем углы */
+    padding: 2px 4px; /* Увеличиваем отступы */
+    color: #333; /* Темный цвет текста для лучшей читаемости */
+}
+
+/* Увеличение шрифта и оформление для блоков кода */
+pre code {
+    font-size: 1.2rem; /* Увеличиваем шрифт */
+    background-color: #1e1e1e; /* Темный фон для блоков */
+    color: #dcdcdc; /* Светлый текст */
+    border-radius: 8px; /* Закругляем углы */
+    padding: 16px; /* Добавляем отступы внутри */
+    border: 1px solid #333; /* Тонкий контур */
+    overflow-x: auto; /* Добавляем горизонтальный скроллинг */
+}
