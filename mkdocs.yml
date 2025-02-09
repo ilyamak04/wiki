@@ -73,7 +73,3 @@ extra_javascript:
 plugins:
   - glightbox
 
-nav:
-- Linux:
-    - Команды: Команды.md
-    - Заметки: Заметки.md
