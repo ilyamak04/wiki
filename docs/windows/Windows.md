@@ -33,7 +33,7 @@
 
 `AOMEI Partition Assistant` - для работы с дисками
 
-##### Реестр 
+#### Реестр 
 
 - `Win+R`
 - `regedit` 
