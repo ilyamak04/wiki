@@ -37,3 +37,20 @@ pre code {
     border: 1px solid #333; /* Тонкий контур */
     overflow-x: auto; /* Добавляем горизонтальный скроллинг */
 }
+
+#back-to-top {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    display: none;
+    background-color: #007bff;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    z-index: 1000;
+}
+
+#back-to-top:hover {
+    background-color: #0056b3;
+}

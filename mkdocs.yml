@@ -67,5 +67,13 @@ markdown_extensions:
 extra_css:
   - stylesheets/extra.css
 
+extra_javascript:
+  - stylesheets/extra.js
+
 plugins:
   - glightbox
+
+nav:
+- Linux:
+    - Команды: Команды.md
+    - Заметки: Заметки.md
