@@ -31,7 +31,13 @@ locale-gen ru_RU
 locale-gen ru_RU.UTF-8
 update-locale
 ```
-
+- `Добавить aлиас для перехода на виндовый рабочий стол`
+```bash
+# Добавить в ~/.bashrc
+alias win='cd /mnt/c/Users/<user_name>/Desktop/
+# Применить
+source ~/.bashrc   
+```
 ### Взаимодействие Windows c WSL (рассматриваем WSL Version 2)
 
 WSL работает на основе реального ядра Linux, запущенного внутри виртуальной машины с Hyper-V, WSL совместима почти со всеми Linux-приложениями.
