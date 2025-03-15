@@ -146,14 +146,14 @@ proxy_set_header X-Forwarded-Proto $scheme;
 - `etag on|off;` Включает или отключает генерацию заголовка ETag для статических файлов.
 - `if_modified_since` Управляет поведением заголовка If-Modified-Since.
 - `expires` Устанавливает заголовок Expires для управления кэшированием.
-    - `expires 1h;`  # Кэшировать на 1 час
-    - `expires max;` # Кэшировать на максимальный срок
+    - `expires 1h;` Кэшировать на 1 час
+    - `expires max;` Кэшировать на максимальный срок
 
 - Модуль `ngx_headers_more` Предоставляет дополнительные возможности для работы с заголовками
-    - `more_set_headers` — добавляет или изменяет заголовки.
-    - `more_clear_headers` — удаляет заголовки.
-    - `more_set_input_headers` — изменяет заголовки входящих запросов.
-    - `more_clear_input_headers` — удаляет заголовки входящих запросов.
+    - `more_set_headers` Добавляет или изменяет заголовки.
+    - `more_clear_headers` Удаляет заголовки.
+    - `more_set_input_headers` Изменяет заголовки входящих запросов.
+    - `more_clear_input_headers` Удаляет заголовки входящих запросов.
 
 #### Cache-Control
 
@@ -287,11 +287,11 @@ http {
         ssl_stapling_verify on; # Включает проверку OCSP ответов
 
         # Безопасность
-        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-XSS-Protection "1; mode=block" always;
-        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header Content-Security-Policy "default-src 'self';" always;
+        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always; # Заставляет браузеры использовать только HTTPS для подключения
+        add_header X-Content-Type-Options "nosniff" always; # Запрещает браузерам "угадывать" MIME-тип файла (MIME sniffing), что может предотвратить атаки, связанные с неправильной интерпретацией содержимого
+        add_header X-XSS-Protection "1; mode=block" always; # Включает встроенную защиту браузера от межсайтового скриптинга (XSS)
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always; # strict-origin-when-cross-origin — полный URL отправляется только при переходе внутри одного домена. При переходе на другой домен отправляется только источник (origin, например, https://example.com), а при переходе с HTTPS на HTTP реферер не отправляется
+        add_header Content-Security-Policy "default-src 'self';" always; # разрешает загрузку ресурсов  (скрипты, стили, изображения и т.д.) только с текущего домена (и запрещает встраивание из внешних источников)
 
         # Проксирование
         location /.well-known/acme-challenge/ {
