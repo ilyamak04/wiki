@@ -6,7 +6,7 @@
 
 ```
 location /images/ {
-    alias /var/www/myapp/static/;
+    root /var/www/myapp/static/;
 }
 ```
 
