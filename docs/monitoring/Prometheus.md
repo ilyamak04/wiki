@@ -34,6 +34,7 @@ scrape_configs:
       - targets:
           - 89.22.241.241:9100
 ```
+
 - `useradd -rs /bin/false prometheus` - создаём системного пользователя для работы с prometheus
 - `chown prometheus:prometheus /usr/local/bin/prometheus` 
 - `chown -R prometheus:prometheus /etc/prometheus` 
@@ -57,6 +58,7 @@ ExecStart=/usr/local/bin/prometheus \
 [Install]
 WantedBy=multi-user.target
 ```
+
 - `sudo systemctl daemon-reload` - обновить systemd
 - `sudo systemctl start prometheus`
 - `sudo systemctl enable prometheus`
@@ -77,6 +79,7 @@ ExecStart=/usr/local/bin/prometheus \
 
 !!! tip "Если на сервере нет Nginx"
   `certbot certonly --standalone -d prometheus.mcarov.pro`
+
 
 - Добавить Серт и Ключ в `web-config.yml`
 ```
