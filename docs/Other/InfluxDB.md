@@ -75,8 +75,3 @@ from(bucket: "my-bucket")
 
 - `influxd backup -bucket mybucket /path/to/backup` - резервное копирование бд
 - `influxd restore -bucket mybucket /path/to/backup` - восстановление бд
-
-### Telegraf 
-
-- `telegraf --config /etc/telegraf/telegraf.conf --test` - запустить телеграф в режиме отладки
-
