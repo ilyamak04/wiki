@@ -4,6 +4,7 @@
 haproxy -f /etc/haproxy/haproxy.cfg -c - тестируем
 systemctl reload haproxy - применяем
 ```
+
 ---
 
 - `errorpage <код_ошибки> <URI>`:
