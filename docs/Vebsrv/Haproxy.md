@@ -1,9 +1,7 @@
 ### Разное
 
-```bash
-haproxy -f /etc/haproxy/haproxy.cfg -c - тестируем
-systemctl reload haproxy - применяем
-```
+- `haproxy -f /etc/haproxy/haproxy.cfg -c` - тестируем
+- `systemctl reload haproxy` - применяем
 
 ---
 
