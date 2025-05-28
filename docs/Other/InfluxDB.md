@@ -1,6 +1,6 @@
 ### Influx1.x
 
-- `unflux` - подключиться
+- `unflux` - подключиться (`influx -ssl -host influx.mcarov.pro`)
 - `show databases` - список бд
 - `create database <db>` - создать бд
 - `drop database <db>` - удалить бд 
@@ -29,6 +29,20 @@
 
 - `influxd backup -database mydb /path/to/backup` - резервное копирование бд 
 - `influxd restore -database mydb /path/to/backup` - восстановление бд
+
+#### HTTPS
+
+- `influxdb.conf`
+```conf
+[http]
+  # Determines whether HTTP endpoint is enabled.
+  # enabled = true
+  enabled = true
+  bind-address = ":8086"
+  https-enabled = true
+  https-certificate = "/etc/letsencrypt/live/influx.mcarov.pro/fullchain.pem"
+  https-private-key = "/etc/letsencrypt/live/influx.mcarov.pro/privkey.pem"
+```
 
 ### Influx2.x
 
