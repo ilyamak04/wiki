@@ -10,6 +10,22 @@ sudo apt update && sudo apt install fail2ban -y
 cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local 
 ```
 
+Для модуля `nginx-linit-req`
+
+- Добавить в блок `http`
+```conf
+http {
+...
+limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s;
+...
+}
+```
+
+- Добавить в все `location` для защиты от флуда
+```conf 
+limit_req zone=one burst=5 nodelay;
+```
+
 - `vi /etc/fail2ban/jail.local`
 ```bash
 [DEFAULT]
