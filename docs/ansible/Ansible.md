@@ -1187,3 +1187,150 @@ asdf: 42
 allow_duplicates: true
 ```
 `allow_duplicates: true` - В этом примере `foo` будет выполнено дважды, поскольку мы явно включили эту функцию
+
+### Разное
+
+- `ansible-config dump | grep ROLE`
+
+
+#### Коллекции
+
+`Ansible Collection` — это формат распространения контента Ansible, который объединяет модули, плагины, роли, плейбуки и документацию в один пакет. Коллекции упрощают организацию и повторное использование автоматизации, обеспечивая модульность и версионирование.
+
+- `ansible-galaxy collection install community.general` - установить коллекцию
+```yml
+- name: пример playbook
+  hosts: all
+  tasks:
+    - name: Используем модуль из коллекции
+      community.general.ping:
+```
+
+Использование в `requirements.yml`
+```yml
+collections:
+  - name: community.general
+```
+
+`ansible-galaxy collection install -r requirements.yml`
+
+
+### Молекула
+
+`default scenario test matrix: dependency, cleanup, destroy, syntax, create, prepare, converge, idempotence, side_effect, verify, cleanup, destroy`
+
+- Жизненный цикл `molecule test` (некоторые шаги пропустил)
+  - `create` - Создаётся один (или несколько) контейнеров (по умолчанию с помощью Docker, но можно использовать Vagrant, Podman и др.).
+  - `prepare (опционально)` - Выполняются дополнительные задачи до применения роли (например, установка зависимостей вручную или копирование файлов).
+  - `converge` - Внутри запущенного контейнера запускается Ansible-плейбук.
+  - `idempotence (по умолчанию включена)` - Роль применяется повторно, и Molecule проверяет, что нет изменений (то есть роль идемпотентна).
+  - `verify` - Запускаются тесты (например, на Testinfra) — проверяется, что роль настроила всё корректно: файлы на месте, сервис запущен, порты слушаются и т.д.
+  - `cleanup` - (если настроено отдельно) — Molecule может сначала очистить состояние или данные перед.
+  - `destroy` - Контейнеры удаляются. Тестовое окружение полностью уничтожается.
+
+Также можно запускать стадии по отдельности
+
+- Пример структуры 
+```bash
+roles/mymegarole/
+└── molecule/
+    └── default/
+        ├── destroy.yml
+        ├── prepare.yml
+        ├── molecule.yml
+        ├── converge.yml
+        └── tests/
+            └── test_default.py
+```
+
+- `MOLECULE_DESTROY=never molecule test` - не удалять контейнер для отладки
+
+Молекула при запуске тестового сценария создаёт временный инвентори с хостом, имеющим имя из блока конфигурации `molecule.yml`
+```yml
+platforms:
+  - name: instance
+```
+
+- `molecule init scenario default` - инициализация роли
+- `molecule converge` - запускает create, prepare, converge — контейнер остаётся запущенным
+- `molecule verify` - только проверить результат
+- `molecule destroy` - снести окружение
+- `molecule test --destroy=never`
+- `molecule test` - полный цикл (... → create → converge → verify → ... → destroy)
+- `molecule converge -- -vvv` - после `--` идут аргументы ansible
+
+```bash
+molecule login  # Вход в контейнер по умолчанию
+molecule login --host <instance-name>  # Если несколько контейнеров
+```
+
+#### Файл molecule.yml
+
+- Блок `dependency` - как управлять зависимостями роли 
+```yml
+dependency:
+  name: galaxy
+```
+
+- Блок `driver` - определяет где будет запущена тестовая среда (docker, vagrant, podman, delegated)
+```yml
+driver:
+  name: docker
+```
+
+- Блок `platforms` - конфигурирует виртуальные машины или контейнеры, которые будут подняты
+  - `name` - имя инстанса (контейнера или VM);
+  - `image` - Docker-образ;
+  - `privileged` - нужен ли привилегированный режим (например, для systemd);
+  - `command` - команда для запуска (например, init для systemd);
+  - `pre_build_image` - использовать уже собранный образ, а не строить вручную.
+
+```yml 
+platforms:
+  - name: instance
+    image: geerlingguy/docker-centos7-ansible
+    privileged: true
+    command: /sbin/init
+    pre_build_image: true
+```
+
+- Блок `provisioner` - описывает как прогонять роль
+  - `name` - ansible: указывает, что в качестве провижинера используется Ansible.
+```yml
+provisioner:
+  name: ansible
+```
+
+- Блок `verifier` - инструмент для проверки результата выполнения роли
+```yml
+verifier:
+  name: testinfra
+  lint: false
+```
+
+- Блок `lint` - запускает линтеры перед тестированием
+```yml
+lint: |
+  yamllint .
+  ansible-lint
+```
+
+#### Файл create.yml	
+
+Здесь можно прописать дополнительные шаги после того, как Molecule подняло контейнер/ВМ (например, установить пакеты до применения роли).
+
+#### Файл converge.yml
+
+Основной плейбук — Ansible применяет роль. Обычно просто включает roles: [ blackbox_exporter ].
+
+#### Файл verify.yml	
+
+(опционально) здесь запускаются дополнительные проверки на самой машине (если не используется Testinfra/molecule verify).
+
+#### Файл cleanup.yml
+
+(опционально) шаг перед destroy, чтобы убрать временные файлы, логи или «очистить» состояние на хостах.
+
+#### Файл destroy.yml
+
+Выполняется после cleanup, перед тем как Molecule удалит инстансы (контейнеры/ВМ). В нём можно, например, стянуть артефакты, собрать логи и т. п.
