@@ -80,3 +80,18 @@ JIT-компиляция применяется для оптимизации ч
 
 Таким образом, JVM использует оба подхода: интерпретацию для гибкости и JIT-компиляцию для производительности. 
 
+### Как снять дамп java процесса
+
+- В контейнере 
+```bash
+wget -O heap-dump-tool.jar https://repo1.maven.org/maven2/com/paypal/heap-dump-tool/1.3.1/heap-dump-tool-1.3.1-all.jar
+docker ps
+docker exec mdm_vo_18_8084_node2 ps aux | grep java
+java -jar heap-dump-tool.jar capture mdm_vo_18_8084_node2 -p 42
+```
+
+- На хосте
+```bash
+wget -O heap-dump-tool.jar https://repo1.maven.org/maven2/com/paypal/heap-dump-tool/1.3.1/heap-dump-tool-1.3.1-all.jar
+java -jar heap-dump-tool.jar capture -p <pid>
+```
