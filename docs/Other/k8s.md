@@ -630,6 +630,7 @@ POD - одно запущенное приложение в кластере k8s
 
 !!! info "Разница между `create` и `apply`"
     `create` создаёт ресурс только если его ещё нет, если ресурс уже существует — выдаёт ошибку
+
     `apply` cоздаёт ресурс, если его нет,или обновляет, если он уже существует, поддерживает историю изменений, идемпотентен
 
 ```yml
@@ -667,6 +668,7 @@ kubectl get pod <pod-name> -o jsonpath='{.status.qosClass}'
 #### Best practice для описания пода 
 
 Должны быть:
+
 - Метки
 - Задан образ контейнера
 - Ресурсы контейнера(ов) ограничены
@@ -775,7 +777,7 @@ kubectl describe deployment myapp
 ```bash
 # посмотреть историю ревизий
 kubectl rollout history deployment myapp
-# откатиться к последней ревизии
+# откатиться к ревизии
 kubectl rollout undo deployment myapp --to-revision=3
 ```
 
