@@ -19,7 +19,9 @@
 
 ---
 
+- `SELECT User, Host FROM mysql.user;` - посмотреть юзеров
 - `CREATE USER 'username'@'localhost' IDENTIFIED BY 'password';` - создать пользователя, может коннектиться к базе только через `localhost`
+- `DROP USER 'postfix'@'localhost';`
 
 - Права
 ```sql 
