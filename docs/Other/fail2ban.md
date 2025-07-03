@@ -83,11 +83,13 @@ bantime = 24h
 ```bash 
 fail2ban-server -t
 fail2ban-client reload
-fail2ban-client status        
+fail2ban-client status
 fail2ban-client status sshd    # Статус защиты SSH
 fail2ban-client status nginx-bad-reauest
 fail2ban-client status nginx-botsearch
 fail2ban-client status nginx-http-auth
 fail2ban-client status nginx-limit-req
 tail -f /var/log/fail2ban.log 
+fail2ban-client set <jail> unbanip <IP>	# разбанить ip
+fail2ban-regex /var/log/exim4/mainlog /etc/fail2ban/filter.d/exim-spam.conf # проверить срабатывание фильтра
 ```
