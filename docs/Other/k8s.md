@@ -781,3 +781,12 @@ kubectl rollout history deployment myapp
 kubectl rollout undo deployment myapp --to-revision=3
 ```
 
+### ConfigMap
+
+- `k get cm`
+
+### Secret
+
+- `generic` - пароли/токены для приложений
+- `docker-registry` - данные авторизации в docker registry
+- `tls` - TLS сертификаты
