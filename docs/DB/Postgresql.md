@@ -557,3 +557,4 @@ select * from pg_stat_replication;
 ```sql
 select * from pg_stat_wal_receiver;
 ```
+
