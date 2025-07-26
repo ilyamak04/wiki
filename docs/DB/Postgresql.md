@@ -453,3 +453,107 @@ fi
 - `SHOW shared_preload_libraries;` - список библиотек, которые были загружены при старте PostgreSQL с помощью параметра `shared_preload_libraries` в `postgresql.conf` 
 - `pg_config --pkglibdir` -  показывает путь к каталогу, где находятся библиотеки пг (shared libraries).
 
+### Настройка репликации Master-Slave
+
+- `apt install postgresql postgresql-contrib -y` - устанавливаем СУБД на обе машины
+- `systemctl status postgresql`
+
+#### Настройка Master
+```conf
+# /etc/postgresql/16/main/postgresql.conf
+listen_addresses = 'localhost,150.241.66.94' # 150.241.66.94 адрес ВМ, на которой slave
+wal_level = replica # минимальный уровень необходимый для репликации
+max_wal_senders = 5 # максимальное количество подключений для передачи WAL, максимум 5 слейвов 
+wal_keep_size = 1024MB
+hot_standby = on # разрешаем селекты с реплики, по умолчанию нельзя
+archive_mode = on # включаем архивирование WAL
+archive_command = 'find /var/lib/postgresql/16/main/archive -type f -mtime +7 -delete; gzip < %p > /var/lib/postgresql/16/main/archive/%f.gz'
+```
+
+```
+# /etc/postgresql/16/main/pg_hba.conf
+# файл pg_hba.conf (Host-Based Authentication) управляет доступом к PostgreSQL, определяя, какие пользователи могут подключаться
+# c каких IP-адресов и каким способом аутентификации
+
+host    replication     replicator      192.168.1.2/32           scram-sha-256
+```
+
+Создадим роль для репликации, выполнить:
+
+```bash
+sudo -u postgres psql
+```
+```sql
+CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '<password>'; 
+```
+```sql
+\q
+```
+Открыть «MASTER» базу данных, выполнить скрипт на обновление информации о настройках доступа из файла `pg_hba.conf`:
+SELECT pg_reload_conf();
+
+??? info "Сжатый WAL"
+    PostgreSQL не умеет автоматически разархивировать сжатые WAL-файлы.
+    Если WAL-логи в сжатом формате (.gz), то перед восстановлением их нужно разархивировать вручную в `restore_command`.
+
+    Если archive_command на master сжимает WAL при архивации, например:
+
+    archive_command = 'gzip < %p > /var/lib/postgresql/archive/%f.gz'
+
+    То restore_command на slave должен разархивировать WAL перед восстановлением:
+
+    restore_command = 'gunzip -c /var/lib/postgresql/archive/%f.gz > %p'
+
+    Как это работает?
+
+    restore_command ищет запрашиваемый WAL-файл в архиве.
+    Если он найден в сжатом виде (.gz), команда gunzip -c разархивирует его в нужное место (%p).
+
+    slave применяет этот WAL-файл и продолжает репликацию.
+
+#### Настройка Slave
+
+По умолчанию реплику (slave) нельзя записывать данные, потому что она работает в режиме только для чтения (read-only), на то она и слейв реплика.
+
+```bash
+sudo systemctl stop postgresql
+```
+```bash
+sudo -u postgres rm -rf /var/lib/postgresql/16/main/*
+```
+```bash
+sudo -u postgres pg_basebackup -h 192.109.139.92 -U replicator -D /var/lib/postgresql/16/main -P -R --wal-method=stream` # 192.109.139.92 - ip мастера
+```
+
+Если файл standby.signal присутствует в директории данных ($PGDATA) при запуске PostgreSQL, сервер не будет принимать записи и будет получать данные с Master.
+Он создаётся автоматически при запуске pg_basebackup с флагом -R или вручную.
+Если удалить standby.signal и перезапустить PostgreSQL, сервер станет обычным Master (потеряет связь с репликой).
+
+После выполнения pg_basebackup в `/var/lib/postgresql/16/main/` на Slave должен появиться файл standby.signal. Он сообщает PostgreSQL, что сервер работает как Standby (slave).
+
+```bash
+sudo systemctl start postgresql
+```
+```bash
+sudo systemctl status postgresql
+```
+```sql
+# проверить репликацию на мастере 
+SELECT * FROM pg_stat_replication;
+```
+```sql
+# проверить репликацию на слейве
+SELECT * FROM pg_stat_wal_receiver; 
+```
+
+На slave после окончания загрузки бд и запуска postgres проверить наличие файла `/var/lib/pgsql/16/data/standby.signal`, а также наличие строки подключения к серверу master в файле `/var/lib/pgsql/16/data/postgresql.auto.conf`
+
+Открыть master базу данных, выполнить скрипт на проверку состояния репликации (скрипт должен вернуть строку, в поле «state» должно быть значение «streaming»)
+```sql
+select * from pg_stat_replication;
+```
+
+Открыть slave базу данных, выполнить скрипт на проверку состояния репликации (скрипт должен вернуть строку, в поле «status» должно быть значение «streaming»)
+```sql
+select * from pg_stat_wal_receiver;
+```
