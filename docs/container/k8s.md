@@ -1,5 +1,3 @@
-### Ссылки
-
 ### YAML Синтаксис
 
 #### Основные сущности 
@@ -477,7 +475,7 @@ mount -t nfs4 192.168.122.157:/ /mnt
 
 - Добавить в `/etc/fstab`, для автомонтирования при перезагрузке
 ```bash
-echo "192.168.122.157:/srv/nfs/k8s /mnt nfs4 defaults,_netdev 0 0" | tee -a /etc/fstab
+echo "192.168.122.157:/ /mnt nfs4 defaults,_netdev 0 0" | tee -a /etc/fstab
 ```
 
 #### Разворачиваем кластер
@@ -610,6 +608,31 @@ kubeadm join 192.168.122.157:6443 --token xp77tx.kil97vo6tlfdqqr4 \
 
 - `kubectl explain <name>` - дока (`kubectl explain pod.spec`)
 - `kubectl edit deployment deployment_name` (kubectl edit) - изменение манифеста на лету, нигде не версионируется (использовать только для дебага на тесте)
+- `kubectl config get-contexts` - информация о текущем контексте
+
+
+### Разное
+
+Labels — структурированные данные для логики Kubernetes
+
+- для селекторов (`matchLabels`, `labelSelector`)
+- для группировки объектов (например, связать `Pod` с `ReplicaSet`, `Service`, `Deployment`)
+- участвуют в логике работы контроллеров, планировщика (`scheduler`), сервисов и т.д.
+- нужны для фильтрации: `kubectl get pods -l app=nginx`
+
+Annotations — это метаданные, которые:
+
+- Используются для хранения произвольной информации
+- не участвуют в селекции
+- используются вспомогательными компонентами:
+    - Ingress-контроллеры
+    - cert-manager
+    - kubectl
+    - Helm
+    - CSI (storage drivers)
+    - операторы
+- аннотации часто используются для внутренней логики, дополнительных настроек, или даже инструкций для других систем, в том числе приложений внутри подов
+
 
 ### POD
 
@@ -687,7 +710,11 @@ kubectl get pod <pod-name> -o jsonpath='{.status.qosClass}'
 - нс `kube-system` располагаются приложения control-plane 
 - нс `kube-public` доступен для чтения всем клиентам
 
+- `kubectl config get-contexts` - узнать в каком нс находишься
+
 ### Repcicaset
+
+Задача Replicaset - обеспечить работу заданного количества реплик Pod'ов, описываемых Deployment
 
 - `kubectl get rs` - вывести репликасеты
 - `kubectl delete rs <name>-rs` - удалить rs
@@ -719,7 +746,9 @@ spec:
 
 ### Deployment
 
-Абстракция более выского уровня, которая управляте replicasetами и podами
+Абстракция, которая управляте replicasetами и podами
+
+Deployment предназначен для stateless приложений
 
 - создаёт и управляет ReplicaSet'ом
 - Rolling updates — обновляет приложения без простоя
@@ -750,6 +779,10 @@ spec:
         - containerPort: 80
 ```
 
+- `spec.selector` - определяет за какие поды отвечает Deployment
+
+- `kubectl rollout restart` - перезапуск Deployment 
+
 #### Обновление 
 
 - создаваёт новый ReplicaSet с новой версией образа
@@ -769,7 +802,7 @@ kubectl rollout undo deployment myapp
 - Проверка состояния
 ```bash
 kubectl rollout status deployment myapp
-kubectl get deployment
+kubectl get deployment  
 kubectl describe deployment myapp
 ```
 
@@ -781,12 +814,327 @@ kubectl rollout history deployment myapp
 kubectl rollout undo deployment myapp --to-revision=3
 ```
 
-### ConfigMap
+### Service 
+
+Сущность, которая предоставляет постоянную сетевую точку доступа к группе Pod'ов
+
+- `kubectl get endpoints my-service` - оказывает IP-адреса Pod'ов, к которым направляет трафик Service my-service
+- `k get EndpointSlice`
+
+#### Service headless 
+
+Не обеспечивает балансировку трафика к подам (нет ClusterIP), позволяет обращаться к поду по его доменному имени, используется с Statefulset, т.к. поды "статичны"
+
+### Statefulset
+
+Крнтроллер, похожий на Deployment гарантирует уникальность имени пода, порядок запуска, рестарта, удаления пода, постоянство ip-адреса, томов
+
+### Тома
+
+#### emptyDir
+
+Обычно используется для:
+
+- размещения кэша файлов 
+- данные которые необходимо хранить при сбоях в работе контейнера
+- обмена файлами между несколькими контейнерами в поде
+
+!!! info "При удалении пода (например, при перезапуске, обновлении, сбое узла и т.д.) — данные из emptyDir удаляются безвозвратно"
+
+- Кусочек конфига
+```yaml
+  volumeMounts:
+      - name: empty-volume
+        mountPath: /empty
+volumes:
+- name: empty-volume
+    emptyDir: {}
+```
+
+#### hostPath
+
+!!! warning "Изпользовать hostPath небезопасно!!!"
+    Контейнер получает прямой доступ к файловой системе хоста
+
+- Пример
+```yaml
+volumes:
+  - name: host-logs
+    hostPath:
+      path: /var/log/nginx
+      type: Directory
+```
+
+- Kubernetes может проверять, существует ли путь, и что он из себя представляет
+```yaml
+type: Directory          # Должен быть каталог
+type: DirectoryOrCreate  # Создает каталог, если его нет
+type: File               # Должен быть файл
+type: FileOrCreate       # Создает файл, если его нет
+type: Socket             # Должен быть сокет
+type: CharDevice         # Символьное устройство
+type: BlockDevice        # Блочное устройство
+```
+
+#### downwardAPI
+
+`downwardAPI` позволяет передать метаданные `Pod'а`(например, имя пода, namespace, labels, annotations, ресурсы) в контейнер через переменные окружения или файлы.
+
+- Пример (как том (файлы))
+```yaml
+          volumeMounts:
+            - mountPath: "/etc/pod-info"
+              name: pod-info
+              readOnly: true
+      volumes:
+        - name: pod-info
+          downwardAPI:
+            items:
+              - path: limit-cpu-millicores
+                resourceFieldRef:
+                  containerName: openresty
+                  resource: limits.cpu
+                  divisor: 1m
+              - path: limit-memory-kibibytes
+                resourceFieldRef:
+                  containerName: openresty
+                  resource: limits.memory
+                  divisor: 1Ki
+              - path: labels
+                fieldRef:
+                  fieldPath: metadata.labels
+```
+
+- Пример (как переменные окружения)
+```yaml
+env:
+- name: MY_POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+
+- name: MY_CPU_LIMIT
+  valueFrom:
+    resourceFieldRef:
+      resource: limits.cpu
+```
+
+#### projected
+
+`projected` - это том, который объединяет несколько источников данных в одну директорию
+
+- `secret`
+- `configMap`
+- `downwardAPI`
+- `serviceAccountToken`
+
+- Пример 
+```yaml
+          volumeMounts:
+            - mountPath: "/etc/pod-data"
+              name: all-values
+              readOnly: true
+      volumes:
+        - name: all-values
+          projected:
+            sources:
+              - downwardAPI:
+                  items:
+                    - path: limits/cpu-millicore
+                      resourceFieldRef:
+                        containerName: openresty
+                        resource: limits.cpu
+                        divisor: 1m
+                    - path: limits/memory-kibibytes
+                      resourceFieldRef:
+                        containerName: openresty
+                        resource: limits.memory
+                        divisor: 1Ki
+                    - path: labels
+                      fieldRef:
+                        fieldPath: metadata.labels
+              - secret:
+                  name: user-password-secret
+                  items:
+                    - key: user
+                      path: secret/user
+                    - key: password
+                      path: secret/password
+              - configMap:
+                  name: example-txt
+                  items:
+                    - key: example.txt
+                      path: configs/example.txt
+                    - key: config.yaml
+                      path: configs/config.yaml
+```
+
+#### ConfigMap
+
+ConfigMap - сущность, предназначенная для хранения нечувствительных данных конфигурации в виде пар ключ: значение, позволяет отделить конфигурацию от кода и применять её к контейнерам без необходимости пересборки образа.
 
 - `k get cm`
 
-### Secret
+- Пример 
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod
+spec:
+  containers:
+  - name: app
+    image: myapp:latest
+    envFrom:
+    - configMapRef:
+        name: my-config
+```
 
-- `generic` - пароли/токены для приложений
-- `docker-registry` - данные авторизации в docker registry
-- `tls` - TLS сертификаты
+---
+
+
+- Пример
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+data:
+  APP_MODE: production
+  LOG_LEVEL: debug
+```
+
+
+- Передача переменных окружения из ConfigMap в Pod
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: configmap-demo
+spec:
+  containers:
+  - name: app
+    image: busybox
+    command: ["sh", "-c", "env"]
+    env:
+    - name: APP_MODE
+      valueFrom:
+        configMapKeyRef:
+          name: my-config
+          key: APP_MODE
+    - name: LOG_LEVEL
+      valueFrom:
+        configMapKeyRef:
+          name: my-config
+          key: LOG_LEVEL
+```
+
+
+- Если переменная уже определена через env, она не будет перезаписана envFrom.
+- Можно использовать сразу несколько envFrom (например, ConfigMap и Secret).
+- Если переменная в ConfigMap содержит недопустимые символы (например, точки или тире), она не будет импортирована как env.
+
+#### Secret
+
+Секрет - это объект, который содержит небольшое количетсво конфиденциальных даннх
+
+- `k get secret`
+- `k get secret <name> -o yaml`
+
+- Типы секрета
+    - `generic` (Opaque) - пароли/токены для приложений
+    - `docker-registry` - данные авторизации в docker registry
+    - `tls` - TLS сертификаты
+
+- Пример
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+type: Opaque
+data:
+  username: YWRtaW4=     # base64 от 'admin'
+  password: MWYyZDFlMmU2N2Rm   # base64 от '1f2d1e2e67df'
+```
+
+- Для удобства админитратора есть поле `strigData`, когда манифест примениться содержимое будет закодировано в base64
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+type: Opaque
+stringData:
+  username: admin
+  password: s3cr3t
+```
+
+- Так подключается в манифест
+```yaml
+    env:
+    - name: username
+      valueFrom:
+        secretKeyRef:
+          name: my-secret
+          key: username
+```
+
+!!! warning ""
+    При добавлении новых секретов, необходимо помнить про правила мерджа манифестов, аннотацию `kubectl.kubernetes.io/last-applied-configuration`
+
+- Добавление секретов в контейнер в виде тома
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-volume-pod
+spec:
+  containers:
+  - name: app
+    image: alpine
+    command: ["/bin/sh", "-c", "cat /etc/secret/* && sleep 3600"]
+    volumeMounts:
+    - name: secret-volume
+      mountPath: /etc/secret
+      readOnly: true
+  volumes:
+  - name: secret-volume
+    secret:
+      secretName: my-secret
+```
+```bash
+# внутри контейнера
+cat /etc/secret/username     # выведет: user
+cat /etc/secret/password     # выведет: password
+```
+
+### PV, PVC
+
+- `k get pv`
+
+PersistentVolume (PV) - это объект, который предоставляет долговременное хранилище для Pod'ов, независимое от их жизненного цикла, под подключается к хранилищу не напрямую, а через PersistentVolumeClaim (PVC)    
+
+!!! info "PVC работает только внутри одного namespace, а PV - кластерный объект"
+
+- Архитектура
+    - PersistentVolume (PV) - описывает конкретный ресурс хранилища (например, NFS, iSCSI, Ceph, диск в облаке, локальный диск)
+    - PersistentVolumeClaim (PVC) - это запрос от Pod-а: «Хочу хранилище с такими-то параметрами»
+    - Kubernetes связывает PVC с подходящим PV (если типы и параметры совместимы)
+
+- `accessModes` (способы доступа)
+    - `ReadWriteOnce` (RWO): один Pod может писать (самый частый случай)
+    - `ReadOnlyMany` (ROX): много Pod-ов читают
+    - `ReadWriteMany` (RWX): несколько Pod-ов могут читать и писать (например, NFS)
+
+- `persistentVolumeReclaimPolicy` — что делать после удаления PVC
+    - `Retain` - PV остаётся, данные сохраняются (нужно вручную очистить/перепривязать)
+    - `Delete` - PV и данные удаляются автоматически
+    - `Recycle` - устаревший способ (удаляет файлы, оставляет PV)
+
+- (Связывание PVC c PV) Куб находит подходящий PV по: 
+    - `storage` (размер — должен быть ≥ запроса)
+    - `accessModes` (PV должен удовлетворять запрошенному)
+    - `StorageClass` (если указан)
+
+!!! info "Если нет подходящего PV - PVC останется в состоянии Pending"
