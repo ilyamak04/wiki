@@ -876,99 +876,6 @@ type: CharDevice         # Символьное устройство
 type: BlockDevice        # Блочное устройство
 ```
 
-#### downwardAPI
-
-`downwardAPI` позволяет передать метаданные `Pod'а`(например, имя пода, namespace, labels, annotations, ресурсы) в контейнер через переменные окружения или файлы.
-
-- Пример (как том (файлы))
-```yaml
-          volumeMounts:
-            - mountPath: "/etc/pod-info"
-              name: pod-info
-              readOnly: true
-      volumes:
-        - name: pod-info
-          downwardAPI:
-            items:
-              - path: limit-cpu-millicores
-                resourceFieldRef:
-                  containerName: openresty
-                  resource: limits.cpu
-                  divisor: 1m
-              - path: limit-memory-kibibytes
-                resourceFieldRef:
-                  containerName: openresty
-                  resource: limits.memory
-                  divisor: 1Ki
-              - path: labels
-                fieldRef:
-                  fieldPath: metadata.labels
-```
-
-- Пример (как переменные окружения)
-```yaml
-env:
-- name: MY_POD_NAME
-  valueFrom:
-    fieldRef:
-      fieldPath: metadata.name
-
-- name: MY_CPU_LIMIT
-  valueFrom:
-    resourceFieldRef:
-      resource: limits.cpu
-```
-
-#### projected
-
-`projected` - это том, который объединяет несколько источников данных в одну директорию
-
-- `secret`
-- `configMap`
-- `downwardAPI`
-- `serviceAccountToken`
-
-- Пример 
-```yaml
-          volumeMounts:
-            - mountPath: "/etc/pod-data"
-              name: all-values
-              readOnly: true
-      volumes:
-        - name: all-values
-          projected:
-            sources:
-              - downwardAPI:
-                  items:
-                    - path: limits/cpu-millicore
-                      resourceFieldRef:
-                        containerName: openresty
-                        resource: limits.cpu
-                        divisor: 1m
-                    - path: limits/memory-kibibytes
-                      resourceFieldRef:
-                        containerName: openresty
-                        resource: limits.memory
-                        divisor: 1Ki
-                    - path: labels
-                      fieldRef:
-                        fieldPath: metadata.labels
-              - secret:
-                  name: user-password-secret
-                  items:
-                    - key: user
-                      path: secret/user
-                    - key: password
-                      path: secret/password
-              - configMap:
-                  name: example-txt
-                  items:
-                    - key: example.txt
-                      path: configs/example.txt
-                    - key: config.yaml
-                      path: configs/config.yaml
-```
-
 #### ConfigMap
 
 ConfigMap - сущность, предназначенная для хранения нечувствительных данных конфигурации в виде пар ключ: значение, позволяет отделить конфигурацию от кода и применять её к контейнерам без необходимости пересборки образа.
@@ -1108,6 +1015,101 @@ spec:
 cat /etc/secret/username     # выведет: user
 cat /etc/secret/password     # выведет: password
 ```
+
+#### downwardAPI
+
+`downwardAPI` позволяет передать метаданные `Pod'а`(например, имя пода, namespace, labels, annotations, ресурсы) в контейнер через переменные окружения или файлы.
+
+- Пример (как том (файлы))
+```yaml
+          volumeMounts:
+            - mountPath: "/etc/pod-info"
+              name: pod-info
+              readOnly: true
+      volumes:
+        - name: pod-info
+          downwardAPI:
+            items:
+              - path: limit-cpu-millicores
+                resourceFieldRef:
+                  containerName: openresty
+                  resource: limits.cpu
+                  divisor: 1m
+              - path: limit-memory-kibibytes
+                resourceFieldRef:
+                  containerName: openresty
+                  resource: limits.memory
+                  divisor: 1Ki
+              - path: labels
+                fieldRef:
+                  fieldPath: metadata.labels
+```
+
+- Пример (как переменные окружения)
+```yaml
+env:
+- name: MY_POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+
+- name: MY_CPU_LIMIT
+  valueFrom:
+    resourceFieldRef:
+      resource: limits.cpu
+```
+
+#### projected
+
+`projected` - это том, который объединяет несколько источников данных в одну директорию
+
+- `secret`
+- `configMap`
+- `downwardAPI`
+- `serviceAccountToken`
+
+- Пример 
+```yaml
+          volumeMounts:
+            - mountPath: "/etc/pod-data"
+              name: all-values
+              readOnly: true
+      volumes:
+        - name: all-values
+          projected:
+            sources:
+              - downwardAPI:
+                  items:
+                    - path: limits/cpu-millicore
+                      resourceFieldRef:
+                        containerName: openresty
+                        resource: limits.cpu
+                        divisor: 1m
+                    - path: limits/memory-kibibytes
+                      resourceFieldRef:
+                        containerName: openresty
+                        resource: limits.memory
+                        divisor: 1Ki
+                    - path: labels
+                      fieldRef:
+                        fieldPath: metadata.labels
+              - secret:
+                  name: user-password-secret
+                  items:
+                    - key: user
+                      path: secret/user
+                    - key: password
+                      path: secret/password
+              - configMap:
+                  name: example-txt
+                  items:
+                    - key: example.txt
+                      path: configs/example.txt
+                    - key: config.yaml
+                      path: configs/config.yaml
+```
+
+
 
 ### PV, PVC
 
