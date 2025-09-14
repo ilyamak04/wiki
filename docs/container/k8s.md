@@ -1110,12 +1110,13 @@ PersistentVolume (PV) - это объект, который предоставл
     - Kubernetes связывает PVC с подходящим PV (если типы и параметры совместимы)
 
 - `accessModes` (способы доступа)
-    - `ReadWriteOnce` (RWO): один Pod может писать (самый частый случай)
-    - `ReadOnlyMany` (ROX): много Pod-ов читают
-    - `ReadWriteMany` (RWX): несколько Pod-ов могут читать и писать (например, NFS)
+    - `ReadWriteOnce` (RWO) - том может быть смонтирован на чтение и запись только одним узлом
+    - `ReadOnlyMany` (ROX) - том может быть смонтирован на чтение многими узлами
+    - `ReadWriteMany` (RWX) - том может быть смонтирован на чтение и запись многими узлами. Требуется поддержка со стороны бэкенда (например, NFS, CephFS)
+    - `ReadWriteOncePod` (RWOP) - том может быть смонтирован на чтение и запись только одним подом, гарантирует, что только один под во всем кластере имеет доступ к тому
 
 - `persistentVolumeReclaimPolicy` — что делать после удаления PVC
-    - `Retain` - PV остаётся, данные сохраняются (нужно вручную очистить/перепривязать)
+    - `Retain` - PV остаётся, данные сохраняются (нужно вручную очистить/перепривязать) поведение ПО УМОЛЧАНИЮ для статически созданных томов
     - `Delete` - PV и данные удаляются автоматически
     - `Recycle` - устаревший способ (удаляет файлы, оставляет PV)
 
@@ -1125,6 +1126,94 @@ PersistentVolume (PV) - это объект, который предоставл
     - `StorageClass` (если указан)
 
 !!! info "Если нет подходящего PV - PVC останется в состоянии Pending"
+
+#### Dynamic Provisioning
+
+Настраивается один раз специальный компонент - Provisioner, далее Kubernetes автоматически создает новые PV по запросу от PVC
+
+Как это +- работает:
+
+- Администратор создает `StorageClass`, который описывает тип хранилища и то, как его следует создавать (какой provisioner использовать)
+- Разработчик в своем `PVC` указывает, "мне нужно хранилище из такого-то StorageClass"
+- `PVC` попадает в Kubernetes (etcd)
+- `Provisioner` (контроллер, следящий за неудовлетворенными PVC) видит это
+- `Provisioner` автоматически создает новый PV того типа и размера, который был запрошен
+- `Provisioner` связывает этот новый PV с PVC
+- Том монтируется поду
+
+`Provisioner` - специальный контроллер, который и реализует функционал динамического создания томов
+
+Примеры `Provisioner'ов`
+
+- `pd.csi.storage.gke.io` - для создания дисков в Google Cloud (GKE)
+- `ebs.csi.aws.com` - для создания дисков EBS в AWS
+- `disk.csi.azure.com` - для Azure Disks
+- `nfs.csi.k8s.io` - для динамического создания NFS-шар
+- `rancher.io/local-path` - для создания томов на локальных дисках нод
+
+Как пример работает
+
+- Проверяет API Kubernetes на предмет появления новых `PVC`
+- Видит `PVC`, который ссылается на `StorageClass` с его именем (provisioner: pd.csi.storage.gke.io)
+- Вызывает API своего облачного провайдера (Google Cloud, AWS) для создания реального диска
+- Создает в Kubernetes объект `PersistentVolume`, который указывает на этот только что созданный диск
+- Связывает `PV` и `PVC`
+
+- Пример `SrorageClass`
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd # Название класса, на которое ссылается PVC
+provisioner: pd.csi.storage.gke.io # Драйвер, который умеет создавать диски
+parameters:
+  type: pd-ssd # Тип диска в облаке (SSD)
+  replication-type: regional-pd # Реплицируемый диск
+reclaimPolicy: Delete # Что делать с томом при удалении PVC? (Delete или Retain)
+volumeBindingMode: WaitForFirstConsumer # Ждать создания тома до назначения на под
+allowVolumeExpansion: true # Можно ли потом увеличить размер тома
+```
+
+- Пример `PVC`, который использует `SrorageClass`
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-database-pvc
+  namespace: my-app
+spec:
+  accessModes:
+    - ReadWriteOnce # Том может быть смонтирован на чтение и запись только одним узлом
+  storageClassName: fast-ssd # Запрашиваем хранилище из этого класса
+  resources:
+    requests:
+      storage: 100Gi # Запрашиваем 100 Гибибайт
+```
+
+- Пример `Pod`, который используетс `PVC`
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-database-pod
+spec:
+  containers:
+  - name: db
+    image: postgres:16
+    volumeMounts:
+    - name: data-storage # Монтируем в Pod
+      mountPath: /var/lib/postgresql/data
+  volumes:
+  - name: data-storage
+    persistentVolumeClaim:
+      claimName: my-database-pvc # Указываем имя PVC, который хотим использовать
+```
+
+- `reclaimPolicy`
+    - `Delete` - при удалении `PVC` автоматически удаляется и связанный с ним `PersistentVolume`, а также физический диск в облаке, данные будут безвозвратно утеряны, это поведение ПО УМОЛЧАНИЮ для ДИНАМИЧЕСКИ созданных томов
+    - `Retain` - при удалении `PVC` сам `PV` переходит в состояние `Released`, данные на диске остаются, но том нельзя заново использовать, пока администратор вручную не очистит и не восстановит его, это безопасная политика
+
+- `Access Modes` - 
 
 
 ### DaemonSet
