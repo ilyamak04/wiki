@@ -610,30 +610,6 @@ kubeadm join 192.168.122.157:6443 --token xp77tx.kil97vo6tlfdqqr4 \
 - `kubectl edit deployment deployment_name` (kubectl edit) - изменение манифеста на лету, нигде не версионируется (использовать только для дебага на тесте)
 - `kubectl config get-contexts` - информация о текущем контексте
 
-
-### Разное
-
-Labels — структурированные данные для логики Kubernetes
-
-- для селекторов (`matchLabels`, `labelSelector`)
-- для группировки объектов (например, связать `Pod` с `ReplicaSet`, `Service`, `Deployment`)
-- участвуют в логике работы контроллеров, планировщика (`scheduler`), сервисов и т.д.
-- нужны для фильтрации: `kubectl get pods -l app=nginx`
-
-Annotations — это метаданные, которые:
-
-- Используются для хранения произвольной информации
-- не участвуют в селекции
-- используются вспомогательными компонентами:
-    - Ingress-контроллеры
-    - cert-manager
-    - kubectl
-    - Helm
-    - CSI (storage drivers)
-    - операторы
-- аннотации часто используются для внутренней логики, дополнительных настроек, или даже инструкций для других систем, в том числе приложений внутри подов
-
-
 ### POD
 
 k8s - кластерная ОС
@@ -687,6 +663,15 @@ QoS не управляется напрямую, а автоматически 
 ```bash
 kubectl get pod <pod-name> -o jsonpath='{.status.qosClass}'
 ```
+
+#### Пробы
+
+- Если проба УСПЕШНА:
+    - `Readiness Probe` - Под добавляется в эндпоинты Service. Теперь трафик с Load Balancer'а будет направляться на этот под
+    - `Liveness Probe` - Ничего не происходит. Контейнер продолжает работать как обычно 
+- Если проба НЕУДАЧНА:
+    - `Readiness Probe` - Под удаляется из эндпоинтов Service. Трафик на этот под прекращается. Контейнер НЕ перезапускается
+    - `Liveness Probe` - Контейнер убивается и перезапускается (согласно политике restartPolicy).
 
 #### Best practice для описания пода 
 
@@ -1125,12 +1110,13 @@ PersistentVolume (PV) - это объект, который предоставл
     - Kubernetes связывает PVC с подходящим PV (если типы и параметры совместимы)
 
 - `accessModes` (способы доступа)
-    - `ReadWriteOnce` (RWO): один Pod может писать (самый частый случай)
-    - `ReadOnlyMany` (ROX): много Pod-ов читают
-    - `ReadWriteMany` (RWX): несколько Pod-ов могут читать и писать (например, NFS)
+    - `ReadWriteOnce` (RWO) - том может быть смонтирован на чтение и запись только одним узлом
+    - `ReadOnlyMany` (ROX) - том может быть смонтирован на чтение многими узлами
+    - `ReadWriteMany` (RWX) - том может быть смонтирован на чтение и запись многими узлами. Требуется поддержка со стороны бэкенда (например, NFS, CephFS)
+    - `ReadWriteOncePod` (RWOP) - том может быть смонтирован на чтение и запись только одним подом, гарантирует, что только один под во всем кластере имеет доступ к тому
 
 - `persistentVolumeReclaimPolicy` — что делать после удаления PVC
-    - `Retain` - PV остаётся, данные сохраняются (нужно вручную очистить/перепривязать)
+    - `Retain` - PV остаётся, данные сохраняются (нужно вручную очистить/перепривязать) поведение ПО УМОЛЧАНИЮ для статически созданных томов
     - `Delete` - PV и данные удаляются автоматически
     - `Recycle` - устаревший способ (удаляет файлы, оставляет PV)
 
@@ -1140,3 +1126,486 @@ PersistentVolume (PV) - это объект, который предоставл
     - `StorageClass` (если указан)
 
 !!! info "Если нет подходящего PV - PVC останется в состоянии Pending"
+
+#### Dynamic Provisioning
+
+Настраивается один раз специальный компонент - Provisioner, далее Kubernetes автоматически создает новые PV по запросу от PVC
+
+Как это +- работает:
+
+- Администратор создает `StorageClass`, который описывает тип хранилища и то, как его следует создавать (какой provisioner использовать)
+- Разработчик в своем `PVC` указывает, "мне нужно хранилище из такого-то StorageClass"
+- `PVC` попадает в Kubernetes (etcd)
+- `Provisioner` (контроллер, следящий за неудовлетворенными PVC) видит это
+- `Provisioner` автоматически создает новый PV того типа и размера, который был запрошен
+- `Provisioner` связывает этот новый PV с PVC
+- Том монтируется поду
+
+`Provisioner` - специальный контроллер, который и реализует функционал динамического создания томов
+
+Примеры `Provisioner'ов`
+
+- `pd.csi.storage.gke.io` - для создания дисков в Google Cloud (GKE)
+- `ebs.csi.aws.com` - для создания дисков EBS в AWS
+- `disk.csi.azure.com` - для Azure Disks
+- `nfs.csi.k8s.io` - для динамического создания NFS-шар
+- `rancher.io/local-path` - для создания томов на локальных дисках нод
+
+Как пример работает
+
+- Проверяет API Kubernetes на предмет появления новых `PVC`
+- Видит `PVC`, который ссылается на `StorageClass` с его именем (provisioner: pd.csi.storage.gke.io)
+- Вызывает API своего облачного провайдера (Google Cloud, AWS) для создания реального диска
+- Создает в Kubernetes объект `PersistentVolume`, который указывает на этот только что созданный диск
+- Связывает `PV` и `PVC`
+
+- Пример `SrorageClass`
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd # Название класса, на которое ссылается PVC
+provisioner: pd.csi.storage.gke.io # Драйвер, который умеет создавать диски
+parameters:
+  type: pd-ssd # Тип диска в облаке (SSD)
+  replication-type: regional-pd # Реплицируемый диск
+reclaimPolicy: Delete # Что делать с томом при удалении PVC? (Delete или Retain)
+volumeBindingMode: WaitForFirstConsumer # Ждать создания тома до назначения на под
+allowVolumeExpansion: true # Можно ли потом увеличить размер тома
+```
+
+- Пример `PVC`, который использует `SrorageClass`
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-database-pvc
+  namespace: my-app
+spec:
+  accessModes:
+    - ReadWriteOnce # Том может быть смонтирован на чтение и запись только одним узлом
+  storageClassName: fast-ssd # Запрашиваем хранилище из этого класса
+  resources:
+    requests:
+      storage: 100Gi # Запрашиваем 100 Гибибайт
+```
+
+- Пример `Pod`, который используетс `PVC`
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-database-pod
+spec:
+  containers:
+  - name: db
+    image: postgres:16
+    volumeMounts:
+    - name: data-storage # Монтируем в Pod
+      mountPath: /var/lib/postgresql/data
+  volumes:
+  - name: data-storage
+    persistentVolumeClaim:
+      claimName: my-database-pvc # Указываем имя PVC, который хотим использовать
+```
+
+- `reclaimPolicy`
+    - `Delete` - при удалении `PVC` автоматически удаляется и связанный с ним `PersistentVolume`, а также физический диск в облаке, данные будут безвозвратно утеряны, это поведение ПО УМОЛЧАНИЮ для ДИНАМИЧЕСКИ созданных томов
+    - `Retain` - при удалении `PVC` сам `PV` переходит в состояние `Released`, данные на диске остаются, но том нельзя заново использовать, пока администратор вручную не очистит и не восстановит его, это безопасная политика
+
+- `Access Modes` - 
+
+
+### DaemonSet
+
+Для запуска пода на каждой ноде кластера, если нет ограничений (Taints и Tolerations)
+Манифест как у `Deployment`, кроме параметра `kind`, нет параметра `resplicas`
+
+- `k get ds`
+
+### Taint 
+
+Taint - это свойство ноды, которое действует как ограничение. Взаимодействует с планировщиком.
+
+taint состоит из трёх частей: `key=[value]:Effect`
+
+- `key` - ключ taint (например, node-role.kubernetes.io/control-plane)
+- `value` - значение taint. Не обязателен к определению. Если не указано, то любое значение будет считаться совпадением.
+- `Effect` - действие.
+  - `NoSchedule` - запрещает планирование под на ноде. Поды, запущенные до применения taint не удаляются.
+  - `NoExecute` - запрещает планирование под на ноде. Поды, запущенные до применения taint будут удалены с ноды.
+  - `PreferNoSchedule` - это «предпочтительная» или «мягкая» версия NoSchedule. Планировщик будет пытаться не размещать на узле поды, но это не гарантировано.
+  
+Что бы игнорировать taint `node-role.kubernetes.io/control-plane:NoSchedule` для подов DaemonSet необходимо добавить в манифест толерантность к конкретному типу taint в спецификации пода, например:
+
+```yaml
+spec:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+```
+
+Если мы не указываем значение ключа (value), `operator` должен быть установлен в `Exists`.
+
+- `kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints` - посмотреть taint'ы на нодах
+- Добавить taint
+```bash
+kubectl taint nodes <node_name> key=[value]:Effect
+kubectl taint nodes wr2.kryukov.local test-taint=:NoExecute
+```
+- Чтобы снять taint, добавить в конце команды `-`
+```bash
+kubectl taint nodes wr2.kryukov.local test-taint=:NoExecute-
+```
+
+### NodeSelector
+
+Если необходимо разместить поды на строго определённых нодах кластера, в этом случае можно использовать `nodeselector`. В качестве параметра, используемого для отбора нод, можно указать метки (labels), установленные на нодах.
+
+- `kubectl get nodes --show-labels` - метки на  нодах
+- `kubectl label nodes <node_name> test=test` - добавить метку на ноду
+- `kubectl label nodes <node_name> test=test-` - снять метку с ноды
+
+```yaml
+spec:   
+    nodeSelector:
+        special: ds-only
+```
+
+### Toleration
+
+Toleration не гарантирует, что под будет размещен на помеченном узле. Он лишь разрешает это. Решение все равно принимает планировщик на основе других факторов (достаточно ли ресурсов и т.д.).
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-pod
+spec:
+  containers:
+  - name: my-app
+    image: nvidia/cuda:11.0-base
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+  # Ключевая секция:
+  tolerations:
+  - key: "gpu"           # Должен совпадать с key taint'а
+    operator: "Equal"    # Оператор сравнения. "Equal" или "Exists"
+    value: "true"        # Должен совпадать с value taint'а (если operator=Equal)
+    effect: "NoSchedule" # Должен совпадать с effect taint'а
+```
+
+```yaml 
+operator: "Equal" # точное совпадение по value 
+operator: "Exists" # Toleration сработает для любого taint'а с указанными key и effect. Значение value в этом случае указывать не нужно
+```
+
+### Job
+
+Deployment, например, предназначен для запуска долгоживущих процессов (веб-сервер), которые должны работать постоянно (running), их цель быть всегда доступными
+
+`Job` предназначен для запуска одноразовых задач, которые должны выполниться и завершиться успешно (Succeeded), их цель - выполнить работу и прекратить существование
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: example-job
+spec:
+  # Шаблон пода, который будет выполнять работу
+  template:
+    spec:
+      containers:
+      - name: worker
+        image: busybox
+        command: ["echo", "Hello, Kubernetes Job!"]
+      restartPolicy: Never # или OnFailure. Для Job НЕ допускается Always.
+
+  # Количество успешных завершений, необходимое для успеха всей Job
+  completions: 1 # (по умолчанию 1)
+
+  # Количество Pod'ов, которые могут работать параллельно для достижения цели
+  parallelism: 1 # (по умолчанию 1)
+
+  # Политика перезапуска подов при failure
+  backoffLimit: 6 # (по умолчанию 6) Макс. количество попыток перезапуска пода
+
+  # Таймаут для Job в секундах. Если Job выполняется дольше - она будет убита.
+  activeDeadlineSeconds: 3600
+```
+
+**Как работает Job?**
+
+- Вы создаете объект Job (например, через kubectl apply -f job.yaml).
+- Job-контроллер видит новую задачу и создает один или несколько Pod'ов на основе template.
+- Контроллер следит за состоянием Pod'ов.
+    - Успех: Если под завершается с кодом выхода 0, это считается успешным завершением (Succeeded).   
+    - Неудача: Если под завершается с ненулевым кодом выхода, он считается неудачным (Failed).
+
+- Логика перезапуска:
+    - Если restartPolicy: OnFailure, kubelet перезапустит контейнер внутри того же пода.
+    - Если restartPolicy: Never, Job-контроллер создаст новый под.
+
+- Job продолжает создавать новые поды (с экспоненциальной задержкой, чтобы не заспамить кластер), пока не будет достигнуто либо:
+- Успешное завершение количества подов, указанного в completions.
+- Превышено количество попыток backoffLimit — тогда вся Job помечается как Failed.
+
+
+- `kubectl apply -f job.yaml` - создать job из файла
+- `kubectl get jobs` - список джобов
+- `kubectl describe job <job-name>` - свойства джоба
+- `kubectl logs <pod-name>` - логи конкретного пода
+- `kubectl delete job <job-name>` - удалить Job (автоматически удалит и все его Pod'ы)
+
+- Пример манифеста Job
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi-calculation
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: perl:5.34
+        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"] 
+      restartPolicy: Never
+```
+
+### CronJob
+
+CronJob — это контроллер, который управляет Job'ами, он создает объекты Job по расписанию, используя синтаксис cron
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: example-cronjob
+spec:
+  # Самое главное: расписание в формате cron
+  schedule: "*/5 * * * *" 
+
+  # Шаблон для создания Job
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello
+            image: busybox
+            command: ["echo", "Hello from CronJob!"]
+          restartPolicy: OnFailure
+
+  # Сколько последних успешных Job хранить в истории
+  successfulJobsHistoryLimit: 3 # (по умолчанию 3)
+
+  # Сколько последних неудачных Job хранить в истории
+  failedJobsHistoryLimit: 1 # (по умолчанию 1)
+
+  # Что делать, если новый запуск по расписанию наступает, а предыдущая Job все еще работает
+  concurrencyPolicy: Allow # Разрешить параллельные запуски. Другие значения: "Forbid" (запретить), "Replace" (заменить текущую).
+  
+  # Приостановить работу CronJob (не создавать новые Job), не удаляя уже работающие Job
+  suspend: false # по умолчанию
+```
+
+- `kubectl apply -f cronjob.yaml` - создать/обновить CronJob
+- `kubectl get cronjobs` - посмотреть CronJob
+- `kubectl get cj` - посмотреть CronJob
+- `kubectl get jobs` - посмотреть Job, созданные CronJob
+- `kubectl patch cronjob <cronjob-name> -p '{"spec":{"suspend":true}}'` - приостановить CronJob
+- `kubectl patch cronjob <cronjob-name> -p '{"spec":{"suspend":false}}'` - возобновить CronJob
+- `kubectl delete cronjob <cronjob-name>` - удалить CronJob (удаляет сам CronJob, но НЕ удаляет созданные им Job)
+- `kubectl create job --from=cronjob/<cronjob-name> <manual-job-name>` - принудительно запустить CronJob немедленно, не дожидаясь расписания
+
+- Пример манифеста CronJob
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-report
+spec:
+  schedule: "0 2 * * *" # Каждый день в 2:00 ночи
+  successfulJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: report-generator
+            image: python:3.9
+            command: ["python", "/app/generate_daily_report.py"]
+          restartPolicy: OnFailure
+```
+
+### Affinity
+
+Основные вижы Affinity
+
+- `Node Affinity` - привязка пода к определенным характеристикам ноды
+- `Inter-Pod Affinity/Anti-Affinity` - привязка пода к другим подам или отталкивание от них
+
+#### Node Affinity
+
+- `requiredDuringSchedulingIgnoredDuringExecution` - Жесткое правило ("Должен"). Под обязательно будет размещен на узле, удовлетворяющем условию. Если подходящего узла нет, под останется в статусе Pending
+- `preferredDuringSchedulingIgnoredDuringExecution` - Предпочтение ("Желательно"). Планировщик попытается найти узел, удовлетворяющий условию. Если не найдет - разместит под на любом другом подходящем узле
+
+> Часть `IgnoredDuringExecution` означает, что если метки на узле изменятся после того, как под уже был размещен, это не приведет к выселению пода
+
+Операторы (operator) в `matchExpressions`:
+- `In` - значение метки узла находится в указанном списке
+- `NotIn` - значение метки узла НЕ находится в указанном списке
+- `Exists`- узел имеет метку с указанным ключом (значение не важно)
+- `DoesNotExist` - у узла НЕТ метки с указанным ключом
+- `Gt (Greater than)`,` Lt (Less than)` - для числовых значений
+
+- Пример манифеста
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-app-pod
+spec:
+  containers:
+  - name: my-app
+    image: my-app:latest
+  affinity:
+    nodeAffinity:
+      # ЖЕСТКОЕ правило: под должен быть размещен на узле с меткой 'disktype=ssd'
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd
+      # ПРЕДПОЧТЕНИЕ: и желательно, чтобы это был быстрый NVMe SSD
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1 # Относительный вес (важность) среди других предпочтений (1-100)
+        preference:
+          matchExpressions:
+          - key: ssd-type
+            operator: In
+            values:
+            - nvme
+```
+
+#### Inter-Pod Affinity/Anti-Affinity 
+
+Позволяет указывать правила размещения пода относительно других подов.
+
+- `Pod Affinity` - "Размести этот под рядом/на том же узле, что и эти другие поды"
+- `Pod Anti-Affinity` - "Размести этот под подальше/на другом узле, от этих других подов"
+
+Ключевые понятия:
+
+- `topologyKey` - указывает домен, в котором применяется правило, это метка узла. Может использоваться `kubernetes.io/hostname` (правило применяется в пределах одного узла) или `topology.kubernetes.io/zone` (правило применяется в пределах одной зоны доступности)
+
+- ПРИМЕР. Разместить реплики одного приложения на разных узлах для повышения отказоустойчивости.
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-web-app
+  template:
+    metadata:
+      labels:
+        app: my-web-app # По этой метке будем искать другие поды
+    spec:
+      containers:
+      - name: web
+        image: nginx:latest
+      affinity:
+        podAntiAffinity:
+          # ЖЕСТКОЕ правило: не размещать два пода с app=my-web-app на одном узле
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - my-web-app
+            topologyKey: kubernetes.io/hostname # Где применять Affinity 
+```
+
+!!! tip "Affinity-правила могут быть сложными, полезно комментировать их в манифестах"
+
+В итоге:
+
+!!! info ""
+    - `Taint` - это свойство ноды, которое действует как ограничение,сообщает планировщику кубера (kube-scheduler), что на этом узле запрещено пускать любые поды, которые не имеют `Toleration` к данной `Taint`
+    - `Toleration` - это свойство пода, которое дает ему право быть запланированным на узле с определенным `Taint`, несмотря на ограничение
+    - `Affinity` - это набор правил для пода, которые позволяют ему притягиваться к узлам или другим подам с определенными характеристиками 
+
+#### Pod Topology Spread Constraints
+
+Для равномерного распределения подов между зонами
+
+```yaml
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: *name
+              app.kubernetes.io/instance: *instance
+              app.kubernetes.io/version: *version
+          nodeAffinityPolicy: Ignore
+          nodeTaintsPolicy: Honor
+```
+
+Параметры `topologySpreadConstraints`
+
+- `maxSkew` - максимальная разница количества подов между доменами топологии
+- `topologyKey` - метка на ноде кластера, которая используется для определения доменов топологии
+- `whenUnsatisfiable` - что делать с подом, если он не соответствует ограничению
+    - `DoNotSchedule` - (по умолчанию) запрещает планировщику запускать под на ноде
+    - `ScheduleAnyway` - разрешает запускать под на ноде
+- `labelSelector` - определяет список меток подов, попадающих под это правило
+- `nodeAffinityPolicy` - определят будут ли учитываться `nodeAffinity`/`nodeSelector` пода при расчёте неравномерности распределения пода
+    - `Honor` - (по умолчанию) в расчёт включаются только ноды, соответствующие `nodeAffinity`/`nodeSelector`
+    - `Ignore` - в расчёты включены все ноды
+- `nodeTaintsPolicy` - аналогично `nodeAffinityPolicy`, только учитываются `Taints`
+    - `Honor` - Включаются ноды без установленных `Taints`, а так же ноды для которых у пода есть `Toleration`
+    - `Ignore` - (по умолчанию) в расчёты включены все ноды.
+
+
+### Разное
+
+Labels — структурированные данные для логики Kubernetes
+
+- для селекторов (`matchLabels`, `labelSelector`)
+- для группировки объектов (например, связать `Pod` с `ReplicaSet`, `Service`, `Deployment`)
+- участвуют в логике работы контроллеров, планировщика (`scheduler`), сервисов и т.д.
+- нужны для фильтрации: `kubectl get pods -l app=nginx`
+
+Annotations — это метаданные, которые:
+
+- Используются для хранения произвольной информации
+- не участвуют в селекции
+- используются вспомогательными компонентами:
+    - Ingress-контроллеры
+    - cert-manager
+    - kubectl
+    - Helm
+    - CSI (storage drivers)
+    - операторы
+- аннотации часто используются для внутренней логики, дополнительных настроек, или даже инструкций для других систем, в том числе приложений внутри подов
+
+
+--- 
+
+- `kubectl describe node <node-name>` - инфо о ноде куба
+- `kubectl get pods -o wide` - расширенный вывод о сущности
+- `kubectl events` - события в кластере кубера
