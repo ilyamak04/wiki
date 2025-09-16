@@ -13,6 +13,7 @@
 - `docker history <image_name>` - история создания образа (`--no-trunc` - не обрезать вывод)
 - `docker volume ls` - список всех Docker томов на хосте
 - `docker volume inspect <volume_name>` -  информацию о конкретном docker томе, например, его местоположение, размер и настройки и тп
+- `docker system df` - посмотреть сколько места что занимает 
 - `docker inspect <container_name> | grep -i volumes` - ищет информацию о томах, которые примонтированы к контейнеру
 - `docker port <container_name>` - показывает маппинг портов
 - `docker inspect <container_name> | grep -i port` - подробности о проброшенных портах
