@@ -43,3 +43,15 @@
 - `cmd`
 - `mstsc /admin`
 - ввести креды для подключения
+
+
+#### Команды PowerShell
+
+`Remove-Item -Path "C:\Users\Илья\Downloads\*" -Recurse -Force` - удалить файлы в каталоге
+
+- Топ 30 больших файлов
+```shell
+Get-ChildItem -Path C:\ -Recurse -File -ErrorAction SilentlyContinue | 
+Sort-Object Length -Descending | 
+Select-Object -First 30 Name, @{Name="Size(GB)";Expression={[math]::Round($_.Length/1GB,2)}}, FullName
+```
