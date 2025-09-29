@@ -98,8 +98,16 @@ literal_string: "yes"   # не будет true
 #### Поднимаем ВМ для кластера
 !!! info "Я делаю всё от рута"
 
-- `apt update && apt install -y qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils` - устанавливаем гипервизор
+- `apt update && apt install -y qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils virtinst` - устанавливаем гипервизор
+- Загружаем образ Ununtu
+```bash
+# загружаем live-образ убунты
+wget https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso \
+     -O /var/lib/libvirt/images/ubuntu-24.04.3-live-server-amd64.iso
 
+# проверяем что загрузили
+ls -lh /var/lib/libvirt/images/
+```
 - Создаём ВМ
 ```bash 
 virt-install \
@@ -137,6 +145,7 @@ virt-install \
     - `virsh list --all` - показать список всех виртуальных машин (включая выключенные)
     - `virsh start <vm-name>` - запустить виртуальную машину
     - `virsh undefine <vm-name>` - удалить ВМ из libvirt (не удаляет диск в /var/lib/libvirt/images/)
+    - `virsh undefine <vm_name> --remove-all-storage` - удалить вм со всеми дисками
     - `virsh domifaddr <vm-name>` - показать IP-адрес ВМ (если доступен)
     - `virsh dumpxml <vm-name>` - вывести XML-конфигурацию ВМ
     - `virsh console <vm-name>` - подключиться к консоли ВМ (если настроен serial-порт)
@@ -1580,6 +1589,182 @@ spec:
     - `Honor` - Включаются ноды без установленных `Taints`, а так же ноды для которых у пода есть `Toleration`
     - `Ignore` - (по умолчанию) в расчёты включены все ноды.
 
+
+### RBAC
+
+`RBAC` - это механизм контроля доступа, который определяет:
+
+- Кто (`Subject`) может выполнять
+- Какие действия (`Verbs`) над
+- Какими ресурсами (`Resources`) в Kubernetes.
+
+- `Subject` - Тот, кто хочет выполнить действие:
+  - `User` (Пользователь)
+  - `Group` (Группа)
+  - `ServiceAccount` (Сервисный аккаунт)
+
+- `Resource` - Над чем выполняется действие:
+  - `pods`, `services`, `deployments`, `secrets`, `nodes` и т.д.
+
+- `Verb `- Что можно делать:
+  - `get`, `list`, `create`, `update`, `delete`, `watch`, `patch`
+
+--- 
+
+- `ServiceAccount` (Сервисный аккаунт) - Для внутрикластерной аутентификации 
+  - Существуют внутри Kubernetes
+  - Привязаны к namespace
+  - Имеют формат: system:serviceaccount:<namespace>:<name>
+  - Автоматически создаются для каждого namespace (default)
+  - Используются подами для взаимодействия с Kubernetes API
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-app-sa
+  namespace: production
+```
+
+- `User` (Пользователь)  - Для внешней аутентификации
+  - Не управляются Kubernetes
+  - Создаются внешними системами (сертификаты, OIDC, LDAP)
+  - Глобальные для всего кластера
+
+!!! warn "User НЕ является объектом Kubernetes API!!!"
+
+`Role` - определяет набор прав в рамках одного namespace
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups: [""] 
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+```
+
+
+`ClusterRole` - определяет набор прав для всего кластера или для кластерных ресурсов
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-reader
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+```
+
+`RoleBinding` - связывает `Role` с `Subject` в рамках `namespace`
+```yaml 
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: default
+subjects:
+- kind: User
+  name: alice
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+```
+
+
+`ClusterRoleBinding` - связывает `ClusterRole` с `Subject` `для всего кластера`
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: read-nodes-global
+subjects:
+- kind: Group
+  name: developers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: node-reader
+  apiGroup: rbac.authorization.k8s.io
+```
+
+!!! tip "Как Pod использует ServiceAccount???"
+  1. В Pod монтируется секрет с токеном ServiceAccount
+
+  2. Путь: /var/run/secrets/kubernetes.io/serviceaccount
+
+  3. Pod использует этот токен для аутентификации в Kubernetes API
+
+  
+!!! tip "При создании Pod без указания `serviceAccountName` используется `default` `ServiceAccount`"
+
+
+Kubernetes имеет несколько полезных встроенных ClusterRoles:
+
+- `view`: Просмотр большинства ресурсов (кроме Secrets, RBAC)
+- `edit`: Просмотр + изменение (кроме RBAC)
+- `admin`: Полный доступ в namespace (кроме resource quotas)
+- `cluster-admin`: Полный доступ ко всему кластеру (супер-пользователь)
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dev-admin
+  namespace: development
+subjects:
+- kind: User
+  name: developer1
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+```
+
+- Полезные команды для проверки
+```bash
+# Проверить, может ли текущий пользователь создавать pods
+kubectl auth can-i create pods
+
+# Проверить для другого пользователя
+kubectl auth can-i list secrets --as=system:serviceaccount:default:my-sa
+
+# Проверить в конкретном namespace
+kubectl auth can-i delete pods --namespace production
+
+# Посмотреть все права для текущего пользователя
+kubectl auth can-i --list
+
+# Найти все ClusterRoleBinding
+kubectl get clusterrolebindings -o wide
+
+# Найти все RoleBinding в namespace
+kubectl get rolebindings -n default
+```
+
+
+- Управление контекстами 
+```bash
+# Посмотреть все контексты
+kubectl config get-contexts
+
+# Переключиться на другой контекст
+kubectl config use-context dev-context
+
+# Посмотреть текущий контекст
+kubectl config current-context
+
+# Создать новый контекст
+kubectl config set-context new-context \
+  --cluster=my-cluster \
+  --user=alice \
+  --namespace=production
+```
 
 ### Разное
 
