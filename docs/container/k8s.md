@@ -1599,24 +1599,24 @@ spec:
 - Какими ресурсами (`Resources`) в Kubernetes.
 
 - `Subject` - Тот, кто хочет выполнить действие:
-  - `User` (Пользователь)
-  - `Group` (Группа)
-  - `ServiceAccount` (Сервисный аккаунт)
+    - `User` (Пользователь)
+    - `Group` (Группа)
+    - `ServiceAccount` (Сервисный аккаунт)
 
 - `Resource` - Над чем выполняется действие:
-  - `pods`, `services`, `deployments`, `secrets`, `nodes` и т.д.
+    - `pods`, `services`, `deployments`, `secrets`, `nodes` и т.д.
 
 - `Verb `- Что можно делать:
-  - `get`, `list`, `create`, `update`, `delete`, `watch`, `patch`
+    - `get`, `list`, `create`, `update`, `delete`, `watch`, `patch`
 
 --- 
 
 - `ServiceAccount` (Сервисный аккаунт) - Для внутрикластерной аутентификации 
-  - Существуют внутри Kubernetes
-  - Привязаны к namespace
-  - Имеют формат: system:serviceaccount:<namespace>:<name>
-  - Автоматически создаются для каждого namespace (default)
-  - Используются подами для взаимодействия с Kubernetes API
+    - Существуют внутри Kubernetes
+    - Привязаны к namespace
+    - Имеют формат: system:serviceaccount:<namespace>:<name>
+    - Автоматически создаются для каждого namespace (default)
+    - Используются подами для взаимодействия с Kubernetes API
 
 ```yaml
 apiVersion: v1
@@ -1627,9 +1627,9 @@ metadata:
 ```
 
 - `User` (Пользователь)  - Для внешней аутентификации
-  - Не управляются Kubernetes
-  - Создаются внешними системами (сертификаты, OIDC, LDAP)
-  - Глобальные для всего кластера
+    - Не управляются Kubernetes
+    - Создаются внешними системами (сертификаты, OIDC, LDAP)
+    - Глобальные для всего кластера
 
 !!! warn "User НЕ является объектом Kubernetes API!!!"
 
