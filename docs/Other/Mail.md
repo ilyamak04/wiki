@@ -1,5 +1,8 @@
-https://habr.com/ru/companies/nixys/articles/797971/
+# Mail
+# Это заметочная помойка, которая возникла при развороте почты, когда-нибудь я наведу здесь порядок. Страница не отформатирована и не структурирована
 
+
+https://habr.com/ru/companies/nixys/articles/797971/
 https://habr.com/ru/companies/nixys/articles/797971/
 https://habr.com/ru/companies/nixys/articles/807681/
 
@@ -13,7 +16,7 @@ https://habr.com/ru/companies/nixys/articles/807681/
 ```conf
 dc_eximconfig_configtype='internet'
 dc_other_hostnames='mcarov.pro'
-dc_local_interfaces='127.0.0.1 ; ::1 ; 89.22.228.13'
+dc_local_interfaces='127.0.0.1 ; ::1 ; 89.22.28.13'
 dc_readhost=''
 dc_relay_domains=''
 dc_minimaldns='false'
@@ -47,11 +50,13 @@ dig TXT mcarov.pro +short
 
 
 Письма, не прошедшие проверку, попадают в спам.
+
 _dmarc.mcarov.pro. IN TXT "v=DMARC1; p=quarantine; pct=100; rua=mailto:dmarc@mcarov.pro; aspf=r; fo=1"
 dig +short -ttxt _dmarc.DOMAIN.RU
 
 после тестирования 
 Письма, не прошедшие проверку, отклоняются.
+
 _dmarc.mcarov.pro. IN TXT "v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@mcarov.pro; sp=reject; aspf=s; fo=1"
 dig TXT _dmarc.mcarov.pro +short
 
@@ -418,14 +423,15 @@ chmod 770 /var/mail/vhosts
 
 doveadm auth test test@mcarov.pro E74Vveua
 exim4 -bt test@mcarov.pro
-# → router = virtual_user transport = dovecot_lmtp
+
+# router = virtual_user transport = dovecot_lmtp
 
 
 apt install exim4-daemon-heavy
 
 
 grep dc_use_split_config /etc/exim4/update-exim4.conf.conf
-# должно быть
+
 dc_use_split_config='true'
 
 
@@ -434,8 +440,8 @@ dc_use_split_config='true'
 
 
 cat >> /etc/exim4/exim4.conf.localmacros <<'EOF'
-#
-# --- TLS & submission ---
+
+
 MAIN_TLS_CERTIFICATE = /etc/letsencrypt/live/mail.mcarov.pro/fullchain.pem
 MAIN_TLS_PRIVATEKEY  = /etc/letsencrypt/live/mail.mcarov.pro/privkey.pem
 MAIN_TLS_ADVERTISE_HOSTS = *
@@ -525,14 +531,14 @@ swaks --to test@mcarov.pro \
 
 
 cat >/etc/exim4/conf.d/main/04_exim4-custom_tls <<'EOF'
-# --- собственные пути TLS для Exim ---
+
 tls_certificate = /etc/letsencrypt/live/mail.mcarov.pro/fullchain.pem
 tls_privatekey  = /etc/letsencrypt/live/mail.mcarov.pro/privkey.pem
 EOF
 
 
 cat >/etc/exim4/conf.d/main/06_exim4-custom_tlsadvertise <<'EOF'
-# Рекламируем TLS на любых хостах
+
 tls_advertise_hosts = *
 EOF
 

@@ -10,10 +10,20 @@
 - `git init ; git remote add origin <https> or <ssh>` - добавить удалённый репозиторий 
 - `git remote set-url origin git@github.com:ilyamak04/shortest_flight.git` - установить новый url удалённого репозитория
 - `rm -rf /path/to/repo/.git` - git больше не будет отслеживать эту директорию 
-- `git config --global --list`
-- `git config --global user.name "Ваше Имя"`
-- `git config --global user.email "ваш_емейл@example.com"`
-- `git config ...` - изменить для конкретного репозитория (без флага `--global`)
+- `git config --list` - все конфигурации git
+    - `git config --global --list` - глобальная конфигурация git
+    - `git config --global user.name "Ваше Имя"`
+    - `git config --global user.email "ваш_емейл@example.com"`
+    - `git config --local --list` - локальный настройки (только для текущего репозитория)
+    - `git config --system --list` - системные настройки
+- Пути хранения конфигураций
+```bash
+Системная: /etc/gitconfig
+Глобальная: ~/.gitconfig или ~/.config/git/config
+Локальная: .git/config в папке репозитория
+```
+- `git config ...` - изменить для конкретного репозитория (посмотреть: `git config user.name`)
+- `git config --show-origin user.name` - посмотреть откуда берется значение 
 - `log --pretty=format:'%h %cd | %s%d [%an]' --graph --date=iso` - удобный вывод `git log` 
 - `git pull --rebase` - спуллить изменения из удалённого репозитория в локальную ветку не создавая мерджи, локальные коммиты просто встанут после коммитов из удалённого репозитория 
 
@@ -115,4 +125,3 @@ git tag -d v1.0                 # удалить
 git push origin v1.0            # отправить тэг, по умолчанию git push не отправляет тэги
 git push origin --tags          # отправить все теги (origin, имя удалённого репозитория)
 ```
-

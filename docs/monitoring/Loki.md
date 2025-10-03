@@ -83,6 +83,8 @@ curl http://127.0.0.1:3100/ready
 [Сначала идём по доке](https://min.io/docs/minio/linux/operations/install-deploy-manage/deploy-minio-single-node-single-drive.html)
 !!! warn "Установка Minio в режиме Single-Node Single-Drive подходит только для тестовых окружений"
 
+!!! warn "Лучше так TLS не настраивать, сделал для тренировки"
+
 - Настроим TLS
 ```bash 
 certbot certonly --standalone -w /var/www/html -d minio.mcarov.pro
@@ -95,10 +97,10 @@ chown minio-user:minio-user /home/minio-user/.minio/certs/{public.crt,private.ke
 - `vi /etc/letsencrypt/renewal-hooks/post/minio-copy-certs.sh`
 ```bash
 #!/bin/bash
-cp /etc/letsencrypt/live/minio.mcarov.pro/privkey.pem /etc/minio/certs/private.key
-cp /etc/letsencrypt/live/minio.mcarov.pro/fullchain.pem /etc/minio/certs/public.crt
-chown minio-user:minio-user /etc/minio/certs/*
-chmod 600 /etc/minio/certs/*
+cp /etc/letsencrypt/live/minio.mcarov.pro/privkey.pem /home/minio-user/.minio/certs/private.key
+cp /etc/letsencrypt/live/minio.mcarov.pro/fullchain.pem /home/minio-user/.minio/certs/public.crt
+chown minio-user:minio-user /home/minio-user/.minio/certs/*
+chmod 600 /home/minio-user/.minio/certs/*
 systemctl restart minio
 ```
 
