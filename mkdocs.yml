@@ -1,6 +1,6 @@
 site_name: Ilya Makarov knowledge base
 site_url: https://wiki.mcarov.pro
-copyright: Copyright &copy; 2025
+copyright: Copyright &copy; 2026
 theme:
   name: material
   language: ru
@@ -36,7 +36,7 @@ extra:
   generator: false
   social:
     - icon: fontawesome/brands/github 
-      link: https://git.mcarov.pro/ilyamak04/wiki
+      link: https://github.com/ilyamak04/wiki
     - icon: fontawesome/brands/telegram
       link: https://t.me/ya_ne_moguu
 
