@@ -1,0 +1,41 @@
+name: Deploy MkDocs
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create venv
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Build site
+        run: |
+          source venv/bin/activate
+          mkdocs build
+
+      - name: Deploy release
+        run: |
+          set -e
+
+          RELEASE=$(date +%Y-%m-%d_%H-%M)
+          TARGET=/var/www/wiki/releases/$RELEASE
+
+          mkdir -p $TARGET
+          rsync -a site/ $TARGET/
+
+          ln -sfn $TARGET /var/www/wiki/current
+
+      - name: Cleanup old releases (keep 3)
+        run: |
+          cd /var/www/wiki/releases
+          ls -dt */ | tail -n +4 | xargs -r rm -rf
