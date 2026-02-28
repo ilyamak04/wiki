@@ -1766,6 +1766,10 @@ kubectl config set-context new-context \
   --namespace=production
 ```
 
+### ResourceQuota
+
+ResourceQuota определяет ограничения на namespace
+
 ### Разное
 
 Labels — структурированные данные для логики Kubernetes
@@ -1794,3 +1798,58 @@ Annotations — это метаданные, которые:
 - `kubectl describe node <node-name>` - инфо о ноде куба
 - `kubectl get pods -o wide` - расширенный вывод о сущности
 - `kubectl events` - события в кластере кубера
+
+
+### Интересно 
+
+- k8s - Eventually Consistent (Eventually consistent - система не гарантирует мгновенную согласованность, но гарантирует, что состояние со временем станет правильным), потому что куб постороен как набор независимых control loop (контроллеры)
+
+- Как удаляются ресурсы в кубе 
+
+Вот удалилы мы deployment, дальше приходит GC и видит что у rs нет owner, убивает rs, а потом и поды
+
+- Kubernetes Events — это временные системные сообщения, создаваемые компонентами кластера, которые объясняют изменения состояния объектов и причины ошибок
+
+## Helm
+
+Helm - это пакетный менеджер, шаблонизатор для Kubernetes 
+
+Template - абстракция над некоторым рекурсом K8s (Pod, Service, Ingress)
+
+Chart - это пакет приложения
+
+Просто папка с структурой 
+```
+myapp/
+ ├── Chart.yaml
+ ├── values.yaml
+ ├── templates/
+ │    ├── deployment.yaml
+ │    ├── service.yaml
+ │    └── ingress.yaml
+ └── charts/
+```
+
+Release - это установленный chart в кластере.
+
+Release = Chart + Values  
+
+Helm - это не просто шаблонизатор, helm позволяет деплоить, он объединяет кучу манифестов в единую сущность релиза и позволяет ей управлять 
+
+### Встроенные объекты
+
+- `.Release` - Представляет информацию о текущем релизе
+
+```bash
+.Release.Name - Имя релиза (helm install myapp ./chart)
+.Release.Namespace - Namespace, куда установлен релиз
+.Release.Service - Сервис Helm (обычно Helm)
+.Release.IsInstall - true, если это установка
+.Release.IsUpgrade - true, если это апгрейд
+.Release.Revision - Номер ревизии (для rollback)
+.Release.Time - Время установки/обновления
+```
+
+- `.Chart` - Содержит информацию о самом чарт, который устанавливаешь
+
+TODO: дописать про built-in object
