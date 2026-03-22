@@ -258,3 +258,260 @@ container writable layer
 - Docker использует copy-on-write при изменении файлов
 - порядок инструкций сильно влияет на build cache
 - удаление файлов в новом слое не уменьшает размер образа
+
+### Ещё команды
+
+- Команды
+```bash 
+docker build -t myapp:dev .
+docker run -d --name myapp -p 5000:5000 myapp:dev
+docker ps
+docker ps -a
+docker logs -f myapp
+docker exec -it myapp sh
+docker inspect myapp
+docker stop myapp
+docker rm myapp
+
+docker compose up --build
+docker compose up -d
+docker compose down
+docker compose ps
+docker compose logs -f
+docker compose exec app sh
+docker compose config
+
+docker compose stop 
+docker compose start
+
+docker run -it --rm python:3.13-slim bash
+docker stats
+```
+
+- Остановка внутри сборки Dockerfile
+```
+RUN apt update && apt install -y curl
+RUN sleep infinity
+```
+
+---
+
+#### Пример контейнеризации
+
+- Питонячье приложение
+```dockerfile
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    APP_HOME=/app
+
+WORKDIR ${APP_HOME}
+
+RUN groupadd --system appgroup \
+    && useradd --system --gid appgroup --create-home --home-dir ${APP_HOME} appuser
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+RUN chown -R appuser:appgroup ${APP_HOME}
+
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')" || exit 1
+
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4", "--timeout", "30", "app:app"]
+```
+
+- Приложение на Golang
+```dockerfile
+FROM golang:1.24 AS builder
+
+WORKDIR /src
+
+COPY go.mod ./
+RUN go mod download
+
+COPY main.go ./
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -ldflags="-s -w" -o /out/go-app .
+
+FROM alpine:3.20
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+COPY --from=builder /out/go-app /app/go-app
+
+USER appuser
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1
+
+CMD ["/app/go-app"]
+```
+
+- Конфиг Nginx
+```conf 
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    access_log /dev/stdout;
+    error_log /dev/stderr warn;
+
+    upstream python_upstream {
+        server python-app:8000;
+        keepalive 16;
+    }
+
+    upstream go_upstream {
+        server go-app:8080;
+        keepalive 16;
+    }
+
+    server {
+        listen 8080;
+        server_name _;
+
+        location = /health {
+            access_log off;
+            return 200 'ok';
+            add_header Content-Type text/plain;
+        }
+
+        location /python/ {
+            proxy_pass http://python_upstream/;
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /go/ {
+            proxy_pass http://go_upstream/;
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+```
+
+- Композ 
+```
+services:
+  python-app:
+    build:
+      context: ./python-app
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: prod
+    expose:
+      - "8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - backend
+
+  go-app:
+    build:
+      context: ./go-app
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: prod
+    expose:
+      - "8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.50
+    pids_limit: 80
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - backend
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      python-app:
+        condition: service_healthy
+      go-app:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+```
+
+> хэлфчеки нужно указывать либо в композ, либо в докерфайле (указал и там, и там для примера)
